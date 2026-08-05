@@ -142,6 +142,16 @@ select {
   margin-top: 16px;
 }
 
+.import-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.import-panel input,
+.import-panel select {
+  width: 100%;
+}
+
 .item-form button,
 .chat-form button,
 .import-panel button {

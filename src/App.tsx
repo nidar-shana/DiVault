@@ -31,6 +31,7 @@ function App() {
   const [draft, setDraft] = useState({ title: '', url: '' });
   const [chatQuery, setChatQuery] = useState('');
   const [importSource, setImportSource] = useState<'Pinterest' | 'Instagram'>('Pinterest');
+  const [importUrl, setImportUrl] = useState('');
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
 
   const totals = useMemo(
@@ -137,6 +138,60 @@ function App() {
     setPreviewItem(imported[0]);
   };
 
+  const getSpotifyEmbedUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes('spotify.com')) {
+        return `https://open.spotify.com/embed${parsed.pathname}${parsed.search}`;
+      }
+    } catch {
+      return '';
+    }
+    return '';
+  };
+
+  const getInstagramEmbedUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes('instagram.com')) {
+        const path = parsed.pathname.replace(/\/$/, '');
+        return `https://www.instagram.com${path}/embed`;
+      }
+    } catch {
+      return '';
+    }
+    return '';
+  };
+
+  const getPinterestEmbedUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes('pinterest.com')) {
+        return `https://www.pinterest.com${parsed.pathname}embed/`;
+      }
+    } catch {
+      return '';
+    }
+    return '';
+  };
+
+  const importFromUrl = () => {
+    if (!importUrl.trim()) return;
+    const item: MediaItem = {
+      id: `${importSource}-${Date.now()}`,
+      title: `${importSource} import ${importUrl.trim().slice(-10)}`,
+      url: importUrl.trim(),
+      source: importSource,
+    };
+
+    if (importSource === 'Pinterest') setPinterestPins((prev) => [...prev, item]);
+    else setInstagramSaves((prev) => [...prev, item]);
+
+    setImportUrl('');
+    setActiveTab('browse');
+    setPreviewItem(item);
+  };
+
   const chatbotName = useMemo(() => {
     if (chatbotGender === 'Male') return 'Kai';
     if (chatbotGender === 'Nonbinary') return 'Sky';
@@ -192,7 +247,16 @@ function App() {
     }
 
     if (previewItem.source === 'Spotify') {
-      return (
+      const embedUrl = getSpotifyEmbedUrl(previewItem.url);
+      return embedUrl ? (
+        <iframe
+          className="preview-iframe"
+          title={previewItem.title}
+          src={embedUrl}
+          allow="encrypted-media; clipboard-write"
+          allowFullScreen
+        />
+      ) : (
         <div className="preview-frame">
           <p>{previewItem.title}</p>
           <a className="preview-link" href={previewItem.url} target="_blank" rel="noreferrer">
@@ -202,12 +266,29 @@ function App() {
       );
     }
 
-    if (previewItem.source === 'Pinterest' || previewItem.source === 'Instagram') {
-      return (
+    if (previewItem.source === 'Pinterest') {
+      const embedUrl = getPinterestEmbedUrl(previewItem.url);
+      return embedUrl ? (
+        <iframe className="preview-iframe" title={previewItem.title} src={embedUrl} />
+      ) : (
         <div className="preview-frame">
           <p>{previewItem.title}</p>
           <a className="preview-link" href={previewItem.url} target="_blank" rel="noreferrer">
-            View {previewItem.source} content
+            View Pinterest pin
+          </a>
+        </div>
+      );
+    }
+
+    if (previewItem.source === 'Instagram') {
+      const embedUrl = getInstagramEmbedUrl(previewItem.url);
+      return embedUrl ? (
+        <iframe className="preview-iframe" title={previewItem.title} src={embedUrl} />
+      ) : (
+        <div className="preview-frame">
+          <p>{previewItem.title}</p>
+          <a className="preview-link" href={previewItem.url} target="_blank" rel="noreferrer">
+            View Instagram post
           </a>
         </div>
       );
@@ -401,7 +482,13 @@ function App() {
                 <option value="Pinterest">Pinterest</option>
                 <option value="Instagram">Instagram</option>
               </select>
-              <button onClick={importFavorites}>Import from {importSource}</button>
+              <input
+                value={importUrl}
+                placeholder={`Paste ${importSource} URL to import`}
+                onChange={(e) => setImportUrl(e.target.value)}
+              />
+              <button onClick={importFromUrl}>Import URL</button>
+              <button onClick={importFavorites}>Auto import favorites</button>
             </div>
           </section>
         )}
