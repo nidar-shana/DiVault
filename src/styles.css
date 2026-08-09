@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Elephant', 'Times New Roman', serif;
   background: #f5f7fb;
   color: #1f2937;
 }
@@ -150,6 +150,110 @@ select {
 .import-panel input,
 .import-panel select {
   width: 100%;
+}
+
+.api-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.api-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.api-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.api-card label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.api-card input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #d1d5db;
+}
+
+.api-card button {
+  width: fit-content;
+}
+
+.api-status {
+  margin: 0;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.auth-divider {
+  text-align: center;
+  color: #6b7280;
+  margin: 8px 0;
+}
+
+.oauth-button,
+.signout-button {
+  border: none;
+  background: #111827;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.auth-hint {
+  color: #4b5563;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.auth-config-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-config-grid label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.auth-config-grid input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+}
+
+.service-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.service-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.service-pill.active {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .item-form button,
