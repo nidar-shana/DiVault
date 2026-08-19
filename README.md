@@ -32,7 +32,7 @@ Key features:
 - TypeScript
 - Vite
 - Express
-- OAuth integration with Google and Spotify
+- OAuth integration with Google, YouTube, and Spotify
 - Local storage persistence in the browser
 
 ## Setup
@@ -43,16 +43,31 @@ Key features:
 npm install
 ```
 
-2. Create a `.env` file in the project root with the following values:
+2. Copy `.env.example` to `.env` in the project root and fill in the provider credentials:
 
 ```bash
+cp .env.example .env
+
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 SPOTIFY_CLIENT_ID=your-spotify-client-id
 SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
+VITE_GOOGLE_CLIENT_ID=your-google-client-id
+VITE_YOUTUBE_CLIENT_ID=your-google-client-id
+VITE_SPOTIFY_CLIENT_ID=your-spotify-client-id
 ```
 
-3. Optionally configure client IDs for the frontend in `VITE_GOOGLE_CLIENT_ID`, `VITE_YOUTUBE_CLIENT_ID`, and `VITE_SPOTIFY_CLIENT_ID` via a `.env` file or directly in your environment.
+The `VITE_*` values are public OAuth client IDs used to start the browser redirect. The non-`VITE_` secrets are used only by the Express backend and must not be exposed in frontend code.
+
+3. Restart the development server after changing `.env`; Vite only loads environment variables at startup.
+
+4. For the real OAuth flow, register redirect URIs for your app as:
+
+```text
+http://localhost:5173/?service=google
+http://localhost:5173/?service=youtube
+http://localhost:5173/?service=spotify
+```
 
 ## Development
 
