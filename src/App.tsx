@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 type MediaItem = {
   id: string;
@@ -13,6 +13,12 @@ type UserProfile = {
   name: string;
   email: string;
   gender: string;
+};
+
+type ConnectedServices = {
+  google: boolean;
+  youtube: boolean;
+  spotify: boolean;
 };
 
 const defaultChatbot = 'Hello! I can help you organize your favorites. Choose a category or type a question.';
@@ -33,17 +39,17 @@ function App() {
   const [importSource, setImportSource] = useState<'Pinterest' | 'Instagram'>('Pinterest');
   const [importUrl, setImportUrl] = useState('');
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
-
-  const totals = useMemo(
-    () => ({
-      reading: readingList.length,
-      youtube: youtubeList.length,
-      spotify: spotifyList.length,
-      pinterest: pinterestPins.length,
-      instagram: instagramSaves.length,
-    }),
-    [readingList, youtubeList, spotifyList, pinterestPins, instagramSaves],
-  );
+  const [youtubeQuery, setYoutubeQuery] = useState('');
+  const [spotifyQuery, setSpotifyQuery] = useState('');
+  const [apiStatus, setApiStatus] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [connectedServices, setConnectedServices] = useState<ConnectedServices>({ google: false, youtube: false, spotify: false });
+  const [googleClientId, setGoogleClientId] = useState(import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '');
+  const [youtubeClientId, setYoutubeClientId] = useState(import.meta.env.VITE_YOUTUBE_CLIENT_ID ?? '');
+  const [spotifyClientId, setSpotifyClientId] = useState(import.meta.env.VITE_SPOTIFY_CLIENT_ID ?? '');
+  const [googleAccessToken, setGoogleAccessToken] = useState('');
+  const [youtubeAccessToken, setYoutubeAccessToken] = useState('');
+  const [spotifyAccessToken, setSpotifyAccessToken] = useState('');
 
   const allItems = useMemo(
     () => [...readingList, ...youtubeList, ...spotifyList, ...pinterestPins, ...instagramSaves],
@@ -65,6 +71,10 @@ function App() {
         pinterestPins: MediaItem[];
         instagramSaves: MediaItem[];
         signedIn: boolean;
+        connectedServices?: ConnectedServices;
+        googleAccessToken?: string;
+        youtubeAccessToken?: string;
+        spotifyAccessToken?: string;
       };
 
       setProfile(data.profile);
@@ -75,20 +85,99 @@ function App() {
       setPinterestPins(data.pinterestPins);
       setInstagramSaves(data.instagramSaves);
       setSignedIn(data.signedIn);
+      setConnectedServices(data.connectedServices ?? { google: false, youtube: false, spotify: false });
+      setGoogleAccessToken(data.googleAccessToken ?? '');
+      setYoutubeAccessToken(data.youtubeAccessToken ?? '');
+      setSpotifyAccessToken(data.spotifyAccessToken ?? '');
     } catch {
       // ignore invalid stored state
     }
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const service = params.get('service');
+    const code = params.get('code');
+
+    const finishOAuth = async () => {
+      if (!service || !code) return;
+
+      try {
+        if (service === 'google') {
+          const response = await fetch(`/oauth/google?code=${encodeURIComponent(code)}&redirectUri=${encodeURIComponent(`${window.location.origin}/?service=google`)}`);
+          if (!response.ok) throw new Error('Google exchange failed');
+          const payload = await response.json();
+          setGoogleAccessToken(payload.token?.access_token ?? '');
+          setSignedIn(true);
+          setConnectedServices((prev) => ({ ...prev, google: true }));
+          setProfile((prev) => ({ ...prev, name: payload.profile?.name || prev.name, email: payload.profile?.email || prev.email }));
+          setApiStatus('Google sign-in completed. You can now connect YouTube and Spotify.');
+        }
+
+        if (service === 'youtube') {
+          const response = await fetch('/oauth/youtube', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code,
+              redirectUri: `${window.location.origin}/?service=youtube`,
+            }),
+          });
+          if (!response.ok) throw new Error('YouTube exchange failed');
+          const payload = await response.json();
+          setYoutubeAccessToken(payload.token?.access_token ?? '');
+          setConnectedServices((prev) => ({ ...prev, youtube: true }));
+          setApiStatus('YouTube permission granted. You can import playlists and export your vault.');
+        }
+
+        if (service === 'spotify') {
+          const response = await fetch('/oauth/spotify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code,
+              redirectUri: `${window.location.origin}/?service=spotify`,
+            }),
+          });
+          if (!response.ok) throw new Error('Spotify exchange failed');
+          const payload = await response.json();
+          setSpotifyAccessToken(payload.token?.access_token ?? '');
+          setConnectedServices((prev) => ({ ...prev, spotify: true }));
+          setApiStatus('Spotify permission granted. Your vault can now export linked media data.');
+        }
+      } catch (error) {
+        setApiStatus(error instanceof Error ? error.message : 'OAuth exchange failed');
+      } finally {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    };
+
+    void finishOAuth();
+  }, []);
+
+  useEffect(() => {
     if (!signedIn) return;
     window.localStorage.setItem(
       'divault-vault',
-      JSON.stringify({ profile, chatbotGender, readingList, youtubeList, spotifyList, pinterestPins, instagramSaves, signedIn }),
+      JSON.stringify({
+        profile,
+        chatbotGender,
+        readingList,
+        youtubeList,
+        spotifyList,
+        pinterestPins,
+        instagramSaves,
+        signedIn,
+        connectedServices,
+        googleAccessToken,
+        youtubeAccessToken,
+        spotifyAccessToken,
+      }),
     );
-  }, [signedIn, profile, chatbotGender, readingList, youtubeList, spotifyList, pinterestPins, instagramSaves]);
+  }, [signedIn, profile, chatbotGender, readingList, youtubeList, spotifyList, pinterestPins, instagramSaves, connectedServices, googleAccessToken, youtubeAccessToken, spotifyAccessToken]);
 
-  const handleSignUp = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSignUp = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
@@ -101,6 +190,40 @@ function App() {
     setProfile(profileData);
     setChatbotGender(formData.get('chatbotGender') as ChatbotGender);
     setSignedIn(true);
+  };
+
+  const handleGoogleSignIn = () => {
+    const clientId = googleClientId.trim();
+    const redirectUri = `${window.location.origin}/?service=google`;
+    const state = `google:${Date.now()}`;
+
+    if (!clientId) {
+      setApiStatus('Add your Google client ID in the form above to use the real OAuth redirect.');
+      return;
+    }
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid email profile')}&state=${encodeURIComponent(state)}`;
+    window.location.assign(authUrl);
+  };
+
+  const handleProviderConnect = (provider: 'youtube' | 'spotify') => {
+    const clientId = provider === 'youtube' ? youtubeClientId.trim() : spotifyClientId.trim();
+    const redirectUri = `${window.location.origin}/?service=${provider}`;
+    const state = `${provider}:${Date.now()}`;
+
+    if (!clientId) {
+      setApiStatus(`Add your ${provider} client ID in the form above to use the real OAuth redirect.`);
+      return;
+    }
+
+    if (provider === 'youtube') {
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly')}&state=${encodeURIComponent(state)}`;
+      window.location.assign(authUrl);
+      return;
+    }
+
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('playlist-read-private playlist-read-collaborative')}&state=${encodeURIComponent(state)}`;
+    window.location.assign(authUrl);
   };
 
   const saveItem = (source: MediaItem['source']) => {
@@ -192,6 +315,126 @@ function App() {
     setPreviewItem(item);
   };
 
+  const importFromYouTube = async () => {
+    if (!connectedServices.youtube) {
+      setApiStatus('Connect YouTube first so the app can request permission for playlist access.');
+      return;
+    }
+
+    const trimmedQuery = youtubeQuery.trim();
+    if (!trimmedQuery) {
+      setApiStatus('Enter a YouTube search phrase before importing.');
+      return;
+    }
+
+    if (!youtubeAccessToken) {
+      setApiStatus('Complete the YouTube OAuth flow first so DiVault can use your access token.');
+      return;
+    }
+
+    setIsSyncing(true);
+    setApiStatus('Searching YouTube playlists...');
+
+    try {
+      const response = await fetch('/api/youtube/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: youtubeAccessToken, query: trimmedQuery }),
+      });
+
+      if (!response.ok) throw new Error('YouTube rejected the request.');
+      const payload = await response.json();
+
+      const item: MediaItem = {
+        id: `YouTube-${payload.playlistId}`,
+        title: payload.title,
+        url: payload.url,
+        source: 'YouTube',
+      };
+
+      setYoutubeList((prev) => [item, ...prev]);
+      setPreviewItem(item);
+      setActiveTab('browse');
+      setYoutubeQuery('');
+      setApiStatus(`Imported "${item.title}" from YouTube.`);
+    } catch (error) {
+      setApiStatus(error instanceof Error ? error.message : 'Unable to import from YouTube.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const importFromSpotify = async () => {
+    if (!connectedServices.spotify) {
+      setApiStatus('Connect Spotify first so the app can request permission for playlist access.');
+      return;
+    }
+
+    const trimmedQuery = spotifyQuery.trim();
+    if (!trimmedQuery) {
+      setApiStatus('Enter a Spotify search phrase before importing.');
+      return;
+    }
+
+    if (!spotifyAccessToken) {
+      setApiStatus('Complete the Spotify OAuth flow first so DiVault can use your access token.');
+      return;
+    }
+
+    setIsSyncing(true);
+    setApiStatus('Searching Spotify playlists...');
+
+    try {
+      const response = await fetch('/api/spotify/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: spotifyAccessToken, query: trimmedQuery }),
+      });
+
+      if (!response.ok) throw new Error('Spotify rejected the request.');
+      const payload = await response.json();
+
+      const item: MediaItem = {
+        id: `Spotify-${payload.playlistId}`,
+        title: payload.title,
+        url: payload.url,
+        source: 'Spotify',
+      };
+
+      setSpotifyList((prev) => [item, ...prev]);
+      setPreviewItem(item);
+      setActiveTab('browse');
+      setSpotifyQuery('');
+      setApiStatus(`Imported "${item.title}" from Spotify.`);
+    } catch (error) {
+      setApiStatus(error instanceof Error ? error.message : 'Unable to import from Spotify.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const exportVault = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      profile,
+      connectedServices,
+      readingList,
+      youtubeList,
+      spotifyList,
+      pinterestPins,
+      instagramSaves,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `divault-export-${Date.now()}.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+    setApiStatus('Your vault has been exported as a JSON file.');
+  };
+
   const chatbotName = useMemo(() => {
     if (chatbotGender === 'Male') return 'Kai';
     if (chatbotGender === 'Nonbinary') return 'Sky';
@@ -200,11 +443,11 @@ function App() {
 
   const chatbotResponse = (message: string) => {
     const lower = message.toLowerCase();
-    if (lower.includes('youtube')) return 'You can add a YouTube playlist link and I will keep it in your vault. Want me to help you add one?';
-    if (lower.includes('spotify')) return 'Your Spotify playlists can be stored here. Share the playlist link and I will save it for you.';
-    if (lower.includes('pinterest') || lower.includes('pin')) return 'I can import your Pinterest pins and show them in the Browse tab. Select Pinterest from the importer and press import.';
-    if (lower.includes('instagram') || lower.includes('save')) return 'Instagram saves are stored here too. Send me a post link and I will help you add it.';
-    if (lower.includes('read') || lower.includes('article')) return 'I can keep your reading list organized. Add the article title and URL in the Reading section.';
+    if (lower.includes('youtube')) return 'You can connect YouTube and import playlists after permission is granted.';
+    if (lower.includes('spotify')) return 'Spotify playlists can be connected through the same permission flow.';
+    if (lower.includes('pinterest') || lower.includes('pin')) return 'I can import your Pinterest pins and show them in the Browse tab.';
+    if (lower.includes('instagram') || lower.includes('save')) return 'Instagram saves are stored here too.';
+    if (lower.includes('read') || lower.includes('article')) return 'I can keep your reading list organized.';
     return 'Tell me what you want to save, open, or import, and I will guide you through the vault.';
   };
 
@@ -306,6 +549,10 @@ function App() {
 
   const signOut = () => {
     setSignedIn(false);
+    setConnectedServices({ google: false, youtube: false, spotify: false });
+    setGoogleAccessToken('');
+    setYoutubeAccessToken('');
+    setSpotifyAccessToken('');
     window.localStorage.removeItem('divault-vault');
   };
 
@@ -314,7 +561,7 @@ function App() {
       <div className="page shell">
         <div className="card auth-card">
           <h1>DiVault</h1>
-          <p>Save reading lists, playlists, and favorite pins in one place.</p>
+          <p>Sign in with Google and grant YouTube and Spotify access so your vault can sync and export media data.</p>
           <form onSubmit={handleSignUp} className="auth-form">
             <label>
               Name
@@ -332,8 +579,28 @@ function App() {
                 <option value="Nonbinary">Nonbinary</option>
               </select>
             </label>
-            <button type="submit">Get started</button>
+            <button type="submit">Continue with email</button>
           </form>
+          <div className="auth-divider">or</div>
+          <button className="oauth-button" onClick={handleGoogleSignIn}>Continue with Google</button>
+          <div className="auth-hint">
+            <strong>OAuth setup:</strong> add Google, YouTube, and Spotify client IDs below to use real provider redirects.
+          </div>
+          <div className="auth-config-grid">
+            <label>
+              Google client ID
+              <input value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)} placeholder="Google OAuth client ID" />
+            </label>
+            <label>
+              YouTube client ID
+              <input value={youtubeClientId} onChange={(e) => setYoutubeClientId(e.target.value)} placeholder="YouTube OAuth client ID" />
+            </label>
+            <label>
+              Spotify client ID
+              <input value={spotifyClientId} onChange={(e) => setSpotifyClientId(e.target.value)} placeholder="Spotify client ID" />
+            </label>
+          </div>
+          {apiStatus ? <p className="api-status">{apiStatus}</p> : null}
         </div>
       </div>
     );
@@ -344,7 +611,7 @@ function App() {
       <header className="topbar">
         <div>
           <h1>DiVault</h1>
-          <p>Welcome back, {profile.name}. Your personal media vault is ready.</p>
+          <p>Welcome back, {profile.name}. Your vault is ready for connected media providers.</p>
         </div>
         <div className="profile">
           <span>{profile.name}</span>
@@ -366,6 +633,64 @@ function App() {
       </nav>
 
       <main className="content">
+        <section className="card api-panel">
+          <div className="browse-header">
+            <div>
+              <h2>Connect media providers</h2>
+              <p>Google sign-in starts the session, then YouTube and Spotify prompt for permission before the app can import and export your media data.</p>
+            </div>
+            <button onClick={exportVault}>Export vault</button>
+          </div>
+
+          <div className="service-list">
+            <div className={`service-pill ${connectedServices.google ? 'active' : ''}`}>
+              <span>Google</span>
+              <strong>{connectedServices.google ? 'Connected' : 'Not connected'}</strong>
+            </div>
+            <div className={`service-pill ${connectedServices.youtube ? 'active' : ''}`}>
+              <span>YouTube</span>
+              <strong>{connectedServices.youtube ? 'Permission granted' : 'Awaiting permission'}</strong>
+            </div>
+            <div className={`service-pill ${connectedServices.spotify ? 'active' : ''}`}>
+              <span>Spotify</span>
+              <strong>{connectedServices.spotify ? 'Permission granted' : 'Awaiting permission'}</strong>
+            </div>
+          </div>
+
+          <div className="api-grid">
+            <div className="api-card">
+              <h3>Google</h3>
+              <p>Use Google to sign in and establish your DiVault session.</p>
+              <button onClick={handleGoogleSignIn}>Sign in with Google</button>
+            </div>
+            <div className="api-card">
+              <h3>YouTube</h3>
+              <p>Request access for playlists and channel data from YouTube.</p>
+              <label>
+                Search
+                <input value={youtubeQuery} onChange={(e) => setYoutubeQuery(e.target.value)} placeholder="edm mix, study playlist" />
+              </label>
+              <button onClick={() => handleProviderConnect('youtube')}>Connect YouTube</button>
+              <button onClick={importFromYouTube} disabled={isSyncing}>
+                {isSyncing ? 'Importing...' : 'Import from YouTube'}
+              </button>
+            </div>
+            <div className="api-card">
+              <h3>Spotify</h3>
+              <p>Request permission for playlist browsing and export from Spotify.</p>
+              <label>
+                Search
+                <input value={spotifyQuery} onChange={(e) => setSpotifyQuery(e.target.value)} placeholder="lofi, indie pop" />
+              </label>
+              <button onClick={() => handleProviderConnect('spotify')}>Connect Spotify</button>
+              <button onClick={importFromSpotify} disabled={isSyncing}>
+                {isSyncing ? 'Importing...' : 'Import from Spotify'}
+              </button>
+            </div>
+          </div>
+          {apiStatus ? <p className="api-status">{apiStatus}</p> : null}
+        </section>
+
         {activeTab === 'library' && (
           <section className="grid">
             {[
