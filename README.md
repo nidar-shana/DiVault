@@ -1,6 +1,7 @@
 # DiVault
 
 DiVault is a digital vault for organizing and previewing your favorite media across reading, YouTube, Spotify, Pinterest, and Instagram.
+And saving the boards and pins under categories.
 
 ## Overview
 
